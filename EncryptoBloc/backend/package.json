@@ -1,0 +1,15 @@
+{
+    "name": "blockchain-store-backend",
+    "version": "1.0.0",
+    "description": "Backend for blockchain CID storage",
+    "main": "server.js",
+    "scripts": {
+        "start": "node server.js"
+    },
+    "dependencies": {
+        "express": "^4.17.1",
+        "cors": "^2.8.5",
+        "fabric-network": "^2.2.11",
+        "fabric-ca-client": "^2.2.11"
+    }
+} 

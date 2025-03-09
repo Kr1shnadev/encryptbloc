@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Store CID on Blockchain</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            border: 1px solid #ccc;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .input-group {
+            margin-bottom: 15px;
+        }
+        .input-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        .button {
+            background-color: #2e4f8f;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .button:hover {
+            background-color: #1a3c78;
+        }
+        .button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        #status {
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .success {
+            background-color: #e8f5e9;
+            color: #2e7d32;
+        }
+        .error {
+            background-color: #ffebee;
+            color: #c62828;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        .records-container {
+            margin-top: 20px;
+        }
+        .record-item {
+            background-color: #f8f9fa;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            border-left: 4px solid #2e4f8f;
+        }
+        .record-item h4 {
+            margin: 0 0 10px 0;
+            color: #2c3e50;
+        }
+        .record-meta {
+            font-size: 14px;
+            color: #666;
+        }
+        .loading {
+            display: none;
+            margin-top: 10px;
+        }
+        .loading::after {
+            content: '';
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #2e4f8f;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Store CID on Hyperledger Fabric</h2>
+        
+        <div class="input-group">
+            <label for="cidInput">IPFS Content Identifier (CID):</label>
+            <input type="text" id="cidInput" placeholder="Enter the CID from Pinata" />
+        </div>
+
+        <div class="input-group">
+            <label for="fileNameInput">File Name:</label>
+            <input type="text" id="fileNameInput" placeholder="Enter the original file name" />
+        </div>
+
+        <button class="button" onclick="storeCID()">Store on Blockchain</button>
+        <div class="loading" id="loading"></div>
+        <div id="status"></div>
+    </div>
+
+    <div class="container">
+        <h2>Your Stored Files</h2>
+        <button class="button" onclick="loadStoredCIDs()">Refresh List</button>
+        <div class="records-container" id="recordsContainer"></div>
+    </div>
+
+    <script>
+        const API_BASE_URL = 'http://localhost:3003/api';
+
+        function showStatus(message, type) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.innerHTML = message;
+            statusDiv.className = type;
+        }
+
+        function formatDate(dateString) {
+            return new Date(dateString).toLocaleString();
+        }
+
+        async function storeCID() {
+            const cidInput = document.getElementById('cidInput');
+            const fileNameInput = document.getElementById('fileNameInput');
+            const loading = document.getElementById('loading');
+            
+            const cid = cidInput.value.trim();
+            const fileName = fileNameInput.value.trim();
+
+            if (!cid || !fileName) {
+                showStatus('Please enter both CID and file name', 'error');
+                return;
+            }
+
+            loading.style.display = 'block';
+            showStatus('Storing CID on blockchain...', '');
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/store-cid`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ cid, fileName })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showStatus('CID successfully stored on blockchain!', 'success');
+                    cidInput.value = '';
+                    fileNameInput.value = '';
+                    loadStoredCIDs(); // Refresh the list
+                } else {
+                    throw new Error(result.error);
+                }
+            } catch (error) {
+                showStatus('Error storing CID: ' + error.message, 'error');
+            } finally {
+                loading.style.display = 'none';
+            }
+        }
+
+        async function loadStoredCIDs() {
+            const recordsContainer = document.getElementById('recordsContainer');
+            const loading = document.getElementById('loading');
+            
+            loading.style.display = 'block';
+            recordsContainer.innerHTML = 'Loading...';
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/get-all-cids`);
+                const result = await response.json();
+
+                if (result.success) {
+                    if (result.records.length === 0) {
+                        recordsContainer.innerHTML = '<p>No stored files found.</p>';
+                        return;
+                    }
+
+                    recordsContainer.innerHTML = result.records
+                        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+                        .map(record => `
+                            <div class="record-item">
+                                <h4>${record.fileName}</h4>
+                                <div class="record-meta">
+                                    CID: ${record.cid}<br>
+                                    Stored: ${formatDate(record.timestamp)}<br>
+                                    <a href="https://gateway.pinata.cloud/ipfs/${record.cid}" target="_blank">View on IPFS</a>
+                                </div>
+                            </div>
+                        `).join('');
+                } else {
+                    throw new Error(result.error);
+                }
+            } catch (error) {
+                recordsContainer.innerHTML = `<p class="error">Error loading records: ${error.message}</p>`;
+            } finally {
+                loading.style.display = 'none';
+            }
+        }
+
+        // Load stored CIDs when page loads
+        window.onload = loadStoredCIDs;
+    </script>
+</body>
+</html> 

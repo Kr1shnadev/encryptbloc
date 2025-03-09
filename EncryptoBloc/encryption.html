@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>File Encryption</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            border: 1px solid #ccc;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .button:hover {
+            background-color: #45a049;
+        }
+        .input-group {
+            margin-bottom: 15px;
+        }
+        .input-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        #status {
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .success {
+            background-color: #e8f5e9;
+            color: #2e7d32;
+        }
+        .error {
+            background-color: #ffebee;
+            color: #c62828;
+        }
+        .key-container {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            margin-top: 15px;
+            display: none;
+        }
+        .key-container h3 {
+            margin-top: 0;
+        }
+        .copy-button {
+            background-color: #2196F3;
+            color: white;
+            padding: 5px 10px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-left: 10px;
+        }
+        .file-info {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>File Encryption Service</h2>
+        
+        <div class="input-group">
+            <label for="fileInput">Select File to Encrypt:</label>
+            <input type="file" id="fileInput" onchange="updateFileInfo()" />
+            <div class="file-info" id="fileInfo"></div>
+        </div>
+
+        <button class="button" onclick="encryptFile()">Encrypt File</button>
+        <div id="status"></div>
+
+        <div class="key-container" id="keyContainer">
+            <h3>Encryption Key</h3>
+            <p>Save this key securely - you'll need it to decrypt your file!</p>
+            <div style="display: flex; align-items: center;">
+                <code id="keyDisplay" style="word-break: break-all; background: #eee; padding: 10px; flex: 1;"></code>
+                <button class="copy-button" onclick="copyKey()">Copy Key</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function updateFileInfo() {
+            const fileInput = document.getElementById('fileInput');
+            const fileInfo = document.getElementById('fileInfo');
+            
+            if (fileInput.files.length > 0) {
+                const file = fileInput.files[0];
+                const size = formatFileSize(file.size);
+                fileInfo.innerHTML = `File: ${file.name}<br>Size: ${size}<br>Type: ${file.type || 'Unknown'}`;
+            } else {
+                fileInfo.innerHTML = '';
+            }
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        function copyKey() {
+            const keyDisplay = document.getElementById('keyDisplay');
+            navigator.clipboard.writeText(keyDisplay.textContent)
+                .then(() => alert('Key copied to clipboard!'))
+                .catch(err => alert('Failed to copy key: ' + err));
+        }
+
+        function showStatus(message, type) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.innerHTML = message;
+            statusDiv.className = type;
+        }
+
+        async function encryptFile() {
+            const fileInput = document.getElementById('fileInput');
+            const statusDiv = document.getElementById('status');
+            const keyContainer = document.getElementById('keyContainer');
+            const keyDisplay = document.getElementById('keyDisplay');
+            
+            if (!fileInput.files.length) {
+                showStatus('Please select a file first', 'error');
+                return;
+            }
+
+            try {
+                // Generate a random encryption key
+                const key = await window.crypto.subtle.generateKey(
+                    {
+                        name: "AES-GCM",
+                        length: 256
+                    },
+                    true,
+                    ["encrypt", "decrypt"]
+                );
+
+                const file = fileInput.files[0];
+                const fileBuffer = await file.arrayBuffer();
+
+                // Generate a random IV
+                const iv = window.crypto.getRandomValues(new Uint8Array(12));
+
+                // Encrypt the file
+                const encryptedContent = await window.crypto.subtle.encrypt(
+                    {
+                        name: "AES-GCM",
+                        iv: iv
+                    },
+                    key,
+                    fileBuffer
+                );
+
+                // Export the key
+                const exportedKey = await window.crypto.subtle.exportKey(
+                    "raw",
+                    key
+                );
+
+                // Combine IV and encrypted content
+                const combinedContent = new Uint8Array([
+                    ...iv,
+                    ...new Uint8Array(encryptedContent)
+                ]);
+
+                // Create and download the encrypted file
+                const blob = new Blob([combinedContent], { type: 'application/octet-stream' });
+                const downloadUrl = URL.createObjectURL(blob);
+                const downloadLink = document.createElement('a');
+                downloadLink.href = downloadUrl;
+                downloadLink.download = file.name + '.encrypted';
+                document.body.appendChild(downloadLink);
+                downloadLink.click();
+                document.body.removeChild(downloadLink);
+
+                // Display the encryption key
+                const keyArray = new Uint8Array(exportedKey);
+                const keyHex = Array.from(keyArray)
+                    .map(b => b.toString(16).padStart(2, '0'))
+                    .join('');
+                
+                keyDisplay.textContent = keyHex;
+                keyContainer.style.display = 'block';
+                showStatus('File encrypted successfully! Download started automatically.', 'success');
+
+            } catch (error) {
+                showStatus('Error encrypting file: ' + error.message, 'error');
+            }
+        }
+    </script>
+</body>
+</html> 
